@@ -6,7 +6,7 @@
 /*   By: kfujita <kfujita@student.42tokyo.jp>       +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2022/05/31 00:53:54 by kfujita           #+#    #+#             */
-/*   Updated: 2022/05/31 00:53:55 by kfujita          ###   ########.fr       */
+/*   Updated: 2022/05/31 02:17:38 by kfujita          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,7 +29,7 @@
 // - false
 #include <stdbool.h>
 
-#include "get_next_line.h"
+#include "get_next_line_bonus.h"
 
 // 1. Get length (named `len`) up to a newline from buf
 // 2. Copy&paste/concat the contents of ret&buf into the additional malloced mem
@@ -64,41 +64,55 @@ static bool	is_newline_picked_from_buf(t_str *buf, t_str *ret)
 }
 
 // return: is successed
-static bool	init_static_var(t_str *buf)
+static t_str	*find_or_default_str(t_strarr *buf, int fd)
 {
-	size_t			i;
+	size_t	i;
+	t_str	*ret;
 
-	if (buf->m != NULL)
-		return (true);
-	buf->m = malloc(buf->cap);
-	if (buf->m == NULL)
-		return (false);
 	i = 0;
-	while (i < (size_t)buf->cap)
-		buf->m[i++] = '\0';
-	return (true);
+	while (i < buf->len)
+	{
+		if (buf->elems[i].fd == fd)
+			return (&(buf->elems[i]));
+		i++;
+	}
+	ret = append_to_strarr(buf);
+	if (ret != NULL)
+	{
+		*ret = g_STR_BUF;
+		ret->fd = fd;
+		ret->m = malloc(ret->cap);
+		if (ret->m == NULL)
+		{
+			remove_str(buf, fd);
+			ret = NULL;
+		}
+	}
+	return (ret);
 }
 
 char	*get_next_line(int fd)
 {
-	static t_str	buf = {NULL, 0, BUFFER_SIZE};
+	static t_strarr	bufarr = {NULL, 0, 0};
+	t_str			*buf;
 	t_str			ret;
 
 	ret = g_STR_ZERO;
-	if (init_static_var(&buf) != true)
+	buf = find_or_default_str(&bufarr, fd);
+	if (buf == NULL)
 		return (NULL);
-	if (buf.l > 0 && is_newline_picked_from_buf(&buf, &ret))
+	if (buf->l > 0 && is_newline_picked_from_buf(buf, &ret))
 		return (ret.m);
 	while (true)
 	{
-		buf.l = read(fd, buf.m, buf.cap);
-		if (buf.l <= 0)
+		buf->l = read(fd, buf->m, buf->cap);
+		if (buf->l <= 0)
 		{
-			free(buf.m);
-			buf = g_STR_BUF;
+			free(buf->m);
+			remove_str(&bufarr, fd);
 			break ;
 		}
-		if (is_newline_picked_from_buf(&buf, &ret) == true)
+		if (is_newline_picked_from_buf(buf, &ret) == true)
 			break ;
 	}
 	return (ret.m);
